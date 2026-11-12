@@ -29,19 +29,11 @@
   </div>
   <p class="carne-titulo">Tu avance en el documento</p>
   <ol>
-    <li><a href="#propuesta">Propuesta del dominio</a></li>
-    <li><a href="#drivers">Drivers priorizados</a></li>
-    <li><a href="#escenarios">Escenarios de calidad</a></li>
-    <li><a href="#estilo">Estilo elegido</a></li>
-    <li><a href="#contextos">Contextos delimitados</a></li>
-    <li><a href="#tacticas">Tácticas aplicadas</a></li>
-    <li><a href="#c4">Diagramas C4</a></li>
-    <li><a href="#adr">Decisiones (ADR)</a></li>
-    <li><a href="#riesgos">Riesgos</a></li>
-    <li><a href="#codigo">Código línea por línea</a></li>
-    <li><a href="#esqueleto">Demostración y simulador</a></li>
-    <li><a href="#rubrica">El cuestionario</a></li>
-    <li><a href="#sustentacion">Preguntas de sustentación</a></li>
+    <li><a href="#esqueleto">El esqueleto</a></li>
+    <li><a href="#levantar">Cómo levantarlo</a></li>
+    <li><a href="#drivers-principales">Drivers principales</a></li>
+    <li><a href="#sustentacion">Preguntas de la sustentación</a></li>
+    <li><a href="#anexo">Documentación completa</a></li>
   </ol>
 </nav>
 
@@ -87,268 +79,47 @@
   </aside>
 </header>
 
-<section class="metricas" aria-label="El esqueleto en cifras">
+
+<section id="esqueleto">
+  <h2><span class="num">1</span>El esqueleto: arquitectura orientada a eventos</h2>
+  <p class="pide">El enunciado da tres opciones: microservicios, capas o eventos. Elegimos eventos.</p>
+
+  <div class="opciones">
+    <article class="opcion">
+      <span class="opcion-estado">Descartada</span>
+      <h4>Microservicios con llamadas directas</h4>
+      <p>Vacunación llamaría por HTTP a cada servicio. Si PAIWEB no responde, el registro de la dosis falla o queda a medias.</p>
+    </article>
+    <article class="opcion">
+      <span class="opcion-estado">Descartada</span>
+      <h4>Capas en un solo proceso</h4>
+      <p>Más simple de operar, pero la integración con PAIWEB comparte proceso con el registro clínico y no hay forma natural de esperar a que vuelva.</p>
+    </article>
+    <article class="opcion elegida">
+      <span class="opcion-estado">Elegida</span>
+      <h4>Eventos</h4>
+      <p>Vacunación publica <code>DosisAplicada</code> y no sabe quién lo consume. Cada consumidor tiene su cola y reacciona por separado, aunque otro esté caído.</p>
+    </article>
+  </div>
+
+  <h3>Lo que demuestra el código</h3>
+  <p>El enunciado pide, para eventos, <b>un evento que se publica y al menos dos consumidores que reaccionan por separado</b>. El esqueleto lo cumple así:</p>
+  <ul class="cumple">
+    <li><b>El evento:</b> <code>DosisAplicada</code>, publicado por el servicio de vacunación en el exchange <code>pediatria.eventos</code> de RabbitMQ.</li>
+    <li><b>Consumidor 1:</b> el servicio de notificaciones avisa al acudiente.</li>
+    <li><b>Consumidor 2:</b> el servicio de reporte PAIWEB, con reintentos y cola de errores.</li>
+    <li><b>Procesos separados:</b> cada servicio corre en su propio contenedor Docker.</li>
+  </ul>
+
+  <div class="metricas" aria-label="El esqueleto en cifras">
   <div class="metrica"><span class="cifra" data-hasta="3">3</span><span class="etq">servicios, cada uno en su propio proceso</span></div>
   <div class="metrica"><span class="cifra" data-hasta="2">2</span><span class="etq">consumidores reaccionan al mismo evento</span></div>
   <div class="metrica"><span class="cifra" data-hasta="5">5</span><span class="etq">reglas clínicas revisan cada dosis</span></div>
   <div class="metrica"><span class="cifra" data-hasta="4">4</span><span class="etq">intentos antes de la cola de errores</span></div>
   <div class="metrica"><span class="cifra" data-hasta="14" data-sufijo=" s">14 s</span><span class="etq">de espera máxima si PAIWEB no responde</span></div>
   <div class="metrica"><span class="cifra" data-hasta="1">1</span><span class="etq">comando para levantar todo el sistema</span></div>
-</section>
+</div>
 
-
-<section id="propuesta">
-  <h2><span class="num">01</span>Propuesta del dominio</h2>
-  <p class="pide">Lo que se entregó en el formulario: qué dominio, qué lo hace complejo y sus tres drivers.</p>
-
-  <h3>¿Qué dominio eligieron?</h3>
-  <p>Una plataforma para IPS y consultorios pediátricos que lleva el control de crecimiento y desarrollo de cada niño, su esquema de vacunación y las citas de seguimiento, con acceso para padres y acudientes.</p>
-
-  <h3>¿Qué lo hace complejo?</h3>
-  <div class="tarjetas">
-    <div class="tarjeta">
-      <h4>Reglas de negocio</h4>
-      <p>Las vacunas se aplican por edad, con intervalos mínimos entre dosis y un orden obligatorio. Las mediciones se evalúan contra las curvas de la OMS y los controles son periódicos según la Resolución 3280 de 2018.</p>
-    </div>
-    <div class="tarjeta">
-      <h4>Usuarios distintos</h4>
-      <p>Pediatría y enfermería registran y evalúan; el personal administrativo agenda; los acudientes consultan el carné y reciben recordatorios; la IPS reporta a los entes de salud.</p>
-    </div>
-    <div class="tarjeta">
-      <h4>Restricciones externas</h4>
-      <p>Datos de salud de menores protegidos por la Ley 1581, historia clínica interoperable exigida por la Ley 2015 de 2020 y reporte obligatorio de vacunación a PAIWEB, un sistema externo que puede no responder.</p>
-    </div>
-  </div>
-
-  <h3>Sus tres drivers principales</h3>
-  <div class="tabla-envoltura">
-    <table>
-      <thead><tr><th>Driver</th><th>Qué significa aquí</th><th>Por qué pesa</th></tr></thead>
-      <tbody>
-        <tr><td class="atributo">Correctitud clínica</td><td>Una dosis fuera de orden o de intervalo no se registra; las alertas son exactas.</td><td>Un error afecta la salud de un niño.</td></tr>
-        <tr><td class="atributo">Seguridad y privacidad</td><td>Acceso por rol: un acudiente solo ve a sus hijos, un médico solo a sus pacientes, y todo acceso queda auditado.</td><td>Son datos sensibles de menores, protegidos por ley.</td></tr>
-        <tr><td class="atributo">Interoperabilidad</td><td>El sistema intercambia información con PAIWEB y la historia clínica, y tolera que estén caídos sin perder registros.</td><td>El reporte es obligatorio y depende de sistemas que no controlamos.</td></tr>
-      </tbody>
-    </table>
-  </div>
-</section>
-
-<section id="drivers">
-  <h2><span class="num">02</span>Drivers priorizados</h2>
-  <p class="pide">Árbol de utilidad con las hojas marcadas por importancia y dificultad; restricciones identificadas.</p>
-
-  <p>Cada hoja es un escenario concreto. La primera letra es la <b>importancia para el negocio</b> y la segunda la <b>dificultad técnica</b> (A alta, M media, B baja). Las hojas A-A son las que definieron la arquitectura; las de dificultad baja no la condicionan.</p>
-
-  <div class="tabla-envoltura">
-    <table>
-      <thead><tr><th>Atributo</th><th>Refinamiento</th><th>Hoja (escenario)</th><th>Imp.</th><th>Dif.</th><th>En el esqueleto</th></tr></thead>
-      <tbody>
-        <tr><td class="atributo" rowspan="2">Interoperabilidad</td><td>Tolerancia a fallos del externo</td><td>Si PAIWEB no responde, ninguna dosis registrada se pierde y se reporta al recuperarse.</td><td><span class="nivel A">A</span></td><td><span class="nivel A">A</span></td><td><span class="estado si">Demostrado</span></td></tr>
-        <tr><td>Aislamiento de fallas</td><td>Si el servicio de notificaciones está caído, registrar una dosis sigue funcionando.</td><td><span class="nivel A">A</span></td><td><span class="nivel M">M</span></td><td><span class="estado si">Demostrado</span></td></tr>
-        <tr><td class="atributo" rowspan="2">Correctitud clínica</td><td>Reglas del esquema</td><td>Una dosis que viola el intervalo mínimo o el orden se rechaza antes de publicarse.</td><td><span class="nivel A">A</span></td><td><span class="nivel M">M</span></td><td><span class="estado si">Demostrado</span></td></tr>
-        <tr><td>Alertas de crecimiento</td><td>Una medición bajo el percentil 3 de la OMS genera alerta de riesgo nutricional.</td><td><span class="nivel A">A</span></td><td><span class="nivel A">A</span></td><td><span class="estado no">Diseño</span></td></tr>
-        <tr><td class="atributo" rowspan="2">Seguridad</td><td>Control de acceso</td><td>Un acudiente que consulta un niño que no es suyo recibe acceso denegado.</td><td><span class="nivel A">A</span></td><td><span class="nivel M">M</span></td><td><span class="estado no">Diseño</span></td></tr>
-        <tr><td>Auditoría</td><td>Toda lectura de historia queda registrada con quién, qué y cuándo.</td><td><span class="nivel M">M</span></td><td><span class="nivel M">M</span></td><td><span class="estado no">Diseño</span></td></tr>
-        <tr><td class="atributo" rowspan="2">Modificabilidad</td><td>Nuevos consumidores</td><td>Agregar un tablero para la secretaría de salud no exige tocar el servicio de vacunación.</td><td><span class="nivel M">M</span></td><td><span class="nivel B">B</span></td><td><span class="estado si">Demostrado</span></td></tr>
-        <tr><td>Cambio normativo</td><td>Un cambio del esquema nacional se aplica modificando solo el dominio de vacunación.</td><td><span class="nivel M">M</span></td><td><span class="nivel M">M</span></td><td><span class="estado si">Demostrado</span></td></tr>
-        <tr><td class="atributo">Rendimiento</td><td>Latencia de registro</td><td>Registrar una dosis responde en menos de 500 ms (p95) con 50 usuarios concurrentes.</td><td><span class="nivel B">B</span></td><td><span class="nivel B">B</span></td><td><span class="estado no">No prioritario</span></td></tr>
-      </tbody>
-    </table>
-  </div>
-
-  <h3>Restricciones identificadas</h3>
-  <ul>
-    <li><b>Normativas:</b> Ley 1581 de 2012 (datos personales de menores), Resolución 3280 de 2018 (rutas de atención y controles), Ley 2015 de 2020 (historia clínica interoperable).</li>
-    <li><b>Integración:</b> el reporte de vacunación a PAIWEB es obligatorio y su disponibilidad no la controlamos.</li>
-    <li><b>Del proyecto:</b> tres integrantes, tres semanas, demostración en vivo con un solo comando; stack Java/Spring Boot que el equipo ya conoce.</li>
-  </ul>
-</section>
-
-<section id="escenarios">
-  <h2><span class="num">03</span>Escenarios de calidad</h2>
-  <p class="pide">Al menos tres, completos, con entorno y medida.</p>
-
-  <article class="escenario">
-    <header><h4>PAIWEB no responde</h4><span>E1, Interoperabilidad, A-A</span></header>
-    <dl>
-      <dt>Fuente</dt><dd>Sistema externo PAIWEB</dd>
-      <dt>Estímulo</dt><dd>Deja de responder mientras se registran dosis</dd>
-      <dt>Artefacto</dt><dd>Servicio de reporte a PAIWEB</dd>
-      <dt>Entorno</dt><dd>Operación normal en horario de vacunación</dd>
-      <dt>Respuesta</dt><dd>El registro de la dosis sigue funcionando; el reporte se reintenta con espera creciente y, si se agotan los intentos, queda en una cola de errores para reprocesar</dd>
-      <dt>Medida</dt><dd class="medida">0 dosis perdidas; 4 intentos en ≈14 s antes de pasar a la cola de errores</dd>
-    </dl>
-  </article>
-
-  <article class="escenario">
-    <header><h4>Dosis fuera de intervalo</h4><span>E2, Correctitud clínica, A-M</span></header>
-    <dl>
-      <dt>Fuente</dt><dd>Personal de enfermería</dd>
-      <dt>Estímulo</dt><dd>Registra la dosis 2 de pentavalente 10 días después de la dosis 1</dd>
-      <dt>Artefacto</dt><dd>Dominio del servicio de vacunación</dd>
-      <dt>Entorno</dt><dd>Operación normal</dd>
-      <dt>Respuesta</dt><dd>Se rechaza con un mensaje que explica la regla incumplida y no se publica ningún evento</dd>
-      <dt>Medida</dt><dd class="medida">100 % de dosis inválidas rechazadas; 0 eventos publicados por ellas</dd>
-    </dl>
-  </article>
-
-  <article class="escenario">
-    <header><h4>Consumidor caído</h4><span>E3, Interoperabilidad, A-M</span></header>
-    <dl>
-      <dt>Fuente</dt><dd>Falla de infraestructura</dd>
-      <dt>Estímulo</dt><dd>El servicio de notificaciones o el de reporte se detiene</dd>
-      <dt>Artefacto</dt><dd>Servicio consumidor</dd>
-      <dt>Entorno</dt><dd>Operación normal; el resto del sistema sigue arriba</dd>
-      <dt>Respuesta</dt><dd>Los eventos se acumulan en su cola durable; al volver el servicio, los procesa sin intervención manual</dd>
-      <dt>Medida</dt><dd class="medida">El registro de dosis no se degrada; 0 eventos perdidos durante la caída</dd>
-    </dl>
-  </article>
-
-  <article class="escenario">
-    <header><h4>Nuevo consumidor</h4><span>E4, Modificabilidad, M-B</span></header>
-    <dl>
-      <dt>Fuente</dt><dd>Equipo de desarrollo</dd>
-      <dt>Estímulo</dt><dd>La secretaría de salud pide un tablero de cobertura de vacunación</dd>
-      <dt>Artefacto</dt><dd>Sistema completo</dd>
-      <dt>Entorno</dt><dd>Tiempo de desarrollo</dd>
-      <dt>Respuesta</dt><dd>Se crea un servicio nuevo con su propia cola enlazada al exchange</dd>
-      <dt>Medida</dt><dd class="medida">0 líneas modificadas en el servicio de vacunación</dd>
-    </dl>
-  </article>
-</section>
-
-<section id="estilo">
-  <h2><span class="num">04</span>Estilo elegido</h2>
-  <p class="pide">Cuál, por qué driver y qué sacrifica.</p>
-
-  <p><b>Arquitectura orientada a eventos con servicios independientes.</b> El servicio de vacunación publica el hecho <code>DosisAplicada</code> en un intermediario (RabbitMQ) y no sabe quién lo consume. Cada consumidor tiene su propia cola y reacciona por separado.</p>
-
-  <div class="tarjetas">
-    <div class="tarjeta">
-      <h4>Por qué driver</h4>
-      <p>Interoperabilidad (E1, E3): la cola desacopla en el tiempo al que registra del que reporta, así que PAIWEB caído no detiene la operación clínica. Modificabilidad (E4): sumar consumidores no toca al publicador.</p>
-    </div>
-    <div class="tarjeta">
-      <h4>Qué sacrifica</h4>
-      <p>Consistencia inmediata: hay segundos en que la dosis está registrada pero aún no reportada. Simplicidad: hay un componente más que operar y un flujo más difícil de seguir al depurar.</p>
-    </div>
-    <div class="tarjeta">
-      <h4>Por qué es aceptable</h4>
-      <p>PAIWEB no exige reporte en tiempo real, y un retraso de minutos no afecta la atención. Perder un reporte sí sería grave, y eso es lo que el estilo protege.</p>
-    </div>
-  </div>
-
-  <p>Dentro del servicio de vacunación se usan además <b>puertos y adaptadores</b>: el dominio no depende de Spring ni de RabbitMQ, lo que sostiene el driver de correctitud (las reglas se prueban sin infraestructura) y el de cambio normativo.</p>
-</section>
-
-<section id="contextos">
-  <h2><span class="num">05</span>Contextos delimitados</h2>
-  <p class="pide">Las fronteras y la señal que justifica cada una.</p>
-
-  <div class="tabla-envoltura">
-    <table>
-      <thead><tr><th>Contexto</th><th>Responsabilidad</th><th>Señal que justifica la frontera</th></tr></thead>
-      <tbody>
-        <tr><td class="atributo">Vacunación</td><td>Esquema, reglas de dosis e historial. Es el núcleo y la fuente de verdad del evento.</td><td>Lenguaje clínico propio (dosis, intervalo, esquema) y un ritmo de cambio dictado por la norma nacional.</td></tr>
-        <tr><td class="atributo">Notificaciones</td><td>Comunicar al acudiente lo que pasó y lo que viene.</td><td>Otro lenguaje (mensaje, canal, destinatario), otro usuario (el acudiente) y falla de forma independiente: un SMS que no sale no invalida una dosis.</td></tr>
-        <tr><td class="atributo">Integración PAIWEB</td><td>Traducir y entregar el evento al sistema nacional.</td><td>Depende de un modelo externo que no controlamos; actúa como capa anticorrupción para que ese modelo no contamine el núcleo.</td></tr>
-      </tbody>
-    </table>
-  </div>
-
-  <p>Cada contexto tiene su propia copia del contrato <code>DosisAplicada</code>; lo único compartido es el formato JSON del mensaje. Así ningún servicio depende del código de otro (ver ADR-002).</p>
-</section>
-
-<section id="tacticas">
-  <h2><span class="num">06</span>Tácticas aplicadas</h2>
-  <p class="pide">Cuáles, contra qué escenario y qué degradan.</p>
-
-  <div class="tabla-envoltura">
-    <table>
-      <thead><tr><th>Táctica</th><th>Contra</th><th>Dónde está</th><th>Qué degrada</th></tr></thead>
-      <tbody>
-        <tr><td class="atributo">Intermediario publicar/suscribir</td><td>E3, E4</td><td>Exchange <code>pediatria.eventos</code></td><td>Trazabilidad de punta a punta; agrega un punto de falla</td></tr>
-        <tr><td class="atributo">Colas durables</td><td>E3</td><td><code>QueueBuilder.durable(...)</code></td><td>Algo de rendimiento por escritura a disco</td></tr>
-        <tr><td class="atributo">Reintento con espera creciente</td><td>E1</td><td><code>application.yml</code> de reporte-paiweb</td><td>Latencia del reporte (hasta ≈14 s)</td></tr>
-        <tr><td class="atributo">Cola de mensajes muertos (DLQ)</td><td>E1</td><td><code>paiweb.dosis-aplicada.dlq</code></td><td>Exige reprocesar a mano lo que cae ahí</td></tr>
-        <tr><td class="atributo">Receptor idempotente</td><td>E1</td><td><code>ReportePaiwebListener</code></td><td>Memoria para guardar los eventos ya procesados</td></tr>
-        <tr><td class="atributo">Validación en el dominio</td><td>E2</td><td><code>EsquemaVacunacion</code></td><td>Las reglas viven en un solo servicio: otros no pueden validar por su cuenta</td></tr>
-        <tr><td class="atributo">Encapsular (puertos)</td><td>Cambio normativo</td><td><code>HistorialDosis</code>, <code>PublicadorEventos</code></td><td>Más interfaces y clases que mantener</td></tr>
-      </tbody>
-    </table>
-  </div>
-</section>
-
-<section id="c4">
-  <h2><span class="num">07</span>Diagramas C4</h2>
-  <p class="pide">Niveles 1 y 2, con cajas y flechas anotadas y leyenda.</p>
-
-  <h3>Nivel 1 · Contexto</h3>
-  <figure class="figura">
-    <svg viewBox="0 0 960 520" role="img" aria-label="Diagrama C4 de contexto">
-      <defs>
-        <marker id="m1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="punta"/></marker>
-      </defs>
-
-      <rect x="40" y="30" width="240" height="100" rx="12" class="c-persona"/>
-      <text x="160" y="68" text-anchor="middle" class="t-blanco" font-size="16" font-weight="700">Personal de salud</text>
-      <text x="160" y="88" text-anchor="middle" class="t-blanco" font-size="12">[Persona]</text>
-      <text x="160" y="108" text-anchor="middle" class="t-blanco" font-size="12">Pediatría y enfermería</text>
-
-      <rect x="720" y="30" width="220" height="100" rx="12" class="c-persona"/>
-      <text x="830" y="68" text-anchor="middle" class="t-blanco" font-size="16" font-weight="700">Acudiente</text>
-      <text x="830" y="88" text-anchor="middle" class="t-blanco" font-size="12">[Persona]</text>
-      <text x="830" y="108" text-anchor="middle" class="t-blanco" font-size="12">Padre, madre o responsable</text>
-
-      <rect x="330" y="200" width="300" height="110" rx="12" class="c-sistema"/>
-      <text x="480" y="240" text-anchor="middle" class="t-blanco" font-size="17" font-weight="700">Seguimiento pediátrico</text>
-      <text x="480" y="260" text-anchor="middle" class="t-blanco" font-size="12">[Sistema]</text>
-      <text x="480" y="282" text-anchor="middle" class="t-blanco" font-size="12">Vacunación, controles y alertas</text>
-
-      <rect x="720" y="215" width="220" height="80" rx="12" class="c-externo"/>
-      <text x="830" y="248" text-anchor="middle" class="t-blanco" font-size="15" font-weight="700">Mensajería</text>
-      <text x="830" y="268" text-anchor="middle" class="t-blanco" font-size="12">[Externo] SMS / correo</text>
-
-      <rect x="330" y="400" width="300" height="80" rx="12" class="c-externo"/>
-      <text x="480" y="433" text-anchor="middle" class="t-blanco" font-size="15" font-weight="700">PAIWEB</text>
-      <text x="480" y="453" text-anchor="middle" class="t-blanco" font-size="12">[Externo] Sistema nacional de vacunación</text>
-
-      <rect x="40" y="400" width="240" height="80" rx="12" class="c-futuro"/>
-      <text x="160" y="433" text-anchor="middle" class="t-tinta" font-size="15" font-weight="700">Historia clínica</text>
-      <text x="160" y="453" text-anchor="middle" class="t-suave" font-size="12">[Externo · fuera del esqueleto]</text>
-
-      <path d="M200,130 L380,200" class="flecha" marker-end="url(#m1)"/>
-      <text x="150" y="166" text-anchor="middle" class="t-tinta" font-size="12">Registra dosis y controles</text>
-      <text x="150" y="181" text-anchor="middle" class="t-suave" font-size="11">[HTTPS/JSON]</text>
-
-      <path d="M630,255 L720,255" class="flecha" marker-end="url(#m1)"/>
-      <text x="675" y="244" text-anchor="middle" class="t-tinta" font-size="12">Envía avisos</text>
-      <text x="675" y="274" text-anchor="middle" class="t-suave" font-size="11">[asíncrono]</text>
-
-      <path d="M830,215 L830,130" class="flecha" marker-end="url(#m1)"/>
-      <rect x="838" y="160" width="100" height="34" rx="4" class="fondo-etiqueta"/>
-      <text x="888" y="174" text-anchor="middle" class="t-tinta" font-size="12">Entrega aviso</text>
-      <text x="888" y="189" text-anchor="middle" class="t-suave" font-size="11">[SMS / correo]</text>
-
-      <path d="M480,310 L480,400" class="flecha" marker-end="url(#m1)"/>
-      <rect x="490" y="338" width="170" height="34" rx="4" class="fondo-etiqueta"/>
-      <text x="575" y="352" text-anchor="middle" class="t-tinta" font-size="12">Reporta dosis aplicadas</text>
-      <text x="575" y="367" text-anchor="middle" class="t-suave" font-size="11">[HTTPS, asíncrono]</text>
-
-      <path d="M330,290 L230,400" class="flecha discontinua" marker-end="url(#m1)"/>
-      <text x="175" y="334" text-anchor="middle" class="t-tinta" font-size="12">Intercambia historia</text>
-      <text x="175" y="349" text-anchor="middle" class="t-suave" font-size="11">[HL7 FHIR, futuro]</text>
-    </svg>
-    <div class="leyenda">
-      <span><i class="l-persona"></i>Persona</span>
-      <span><i class="l-sistema"></i>Nuestro sistema</span>
-      <span><i class="l-externo"></i>Sistema externo</span>
-      <span><i class="l-futuro"></i>Fuera del esqueleto</span>
-      <span>Flecha continua: implementada · discontinua: diseño</span>
-    </div>
-  </figure>
-
-  <h3>Nivel 2 · Contenedores</h3>
   <figure class="figura">
     <svg viewBox="0 0 960 620" role="img" aria-label="Diagrama C4 de contenedores">
       <defs>
@@ -442,11 +213,393 @@
   </figure>
 </section>
 
-<section id="adr">
-  <h2><span class="num">08</span>Decisiones de arquitectura (ADR)</h2>
-  <p class="pide">Tres ADR con alternativas descartadas y consecuencias, incluidas las malas.</p>
+<section id="levantar">
+  <h2><span class="num">2</span>Cómo levantarlo</h2>
+  <p class="pide">Arranca con un comando. Solo necesita Docker Desktop encendido.</p>
 
-  <article class="adr">
+<pre class="comando"><code>docker compose up --build</code></pre>
+
+  <p>La primera vez tarda unos minutos mientras descarga dependencias. Queda listo cuando los logs muestran los tres <code>Started ...Application</code>. En otra terminal se corre la demostración:</p>
+
+<pre><code>./demo.sh</code></pre>
+
+  <div class="tabla-envoltura">
+    <table>
+      <thead><tr><th>Qué</th><th>Dónde</th></tr></thead>
+      <tbody>
+        <tr><td class="atributo">Vacunación</td><td><code>localhost:8081</code>, publica el evento</td></tr>
+        <tr><td class="atributo">Notificaciones</td><td><code>localhost:8082/api/notificaciones</code></td></tr>
+        <tr><td class="atributo">Reporte PAIWEB</td><td><code>localhost:8083/api/paiweb/reportes</code></td></tr>
+        <tr><td class="atributo">Consola de RabbitMQ</td><td><code>localhost:15672</code> (usuario y clave <code>guest</code>)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Probar la tolerancia a fallos en vivo</h3>
+<pre><code>docker compose stop reporte-paiweb     # notificaciones sigue funcionando
+./demo.sh
+docker compose start reporte-paiweb    # procesa lo que esperaba en su cola
+
+curl -X POST "localhost:8083/api/paiweb/disponibilidad?valor=false"
+./demo.sh                              # 4 intentos y luego cola de errores</code></pre>
+
+  <h3>Simulador, por si no hay Docker a mano</h3>
+  <p>Una versión reducida de lo que pasa en el sistema real. Registra dosis, apaga el servicio de notificaciones o deja a PAIWEB sin responder, y mira cómo se comporta cada parte. Los tiempos de espera van acelerados.</p>
+
+  <div class="sim" id="sim">
+    <div class="sim-controles">
+      <button type="button" class="sim-boton principal" data-accion="valida">Registrar dosis válida</button>
+      <button type="button" class="sim-boton peligro" data-accion="invalida">Intentar dosis fuera de intervalo</button>
+      <label class="interruptor"><input type="checkbox" id="sw-not" checked><span class="pista"></span>Servicio de notificaciones encendido</label>
+      <label class="interruptor"><input type="checkbox" id="sw-pai" checked><span class="pista"></span>PAIWEB responde</label>
+      <button type="button" class="sim-boton suave" data-accion="reiniciar">Reiniciar</button>
+    </div>
+
+    <div class="sim-escena" id="sim-escena">
+      <div class="nodo n-vac" id="n-vac"><b>Vacunación</b><small>valida y publica</small></div>
+      <div class="nodo n-ex" id="n-ex"><b>RabbitMQ</b><small>pediatria.eventos</small></div>
+
+      <div class="carril c-not">
+        <div class="cola" id="q-not"><small>Cola de notificaciones</small><span class="pila" aria-hidden="true"></span><b class="cuenta">0</b></div>
+        <div class="nodo n-cons" id="n-not"><b>Notificaciones</b><small class="estado-nodo">esperando</small></div>
+        <div class="salida" id="o-not"><small>Acudientes avisados</small><b>0</b></div>
+      </div>
+
+      <div class="carril c-pai">
+        <div class="cola" id="q-pai"><small>Cola de PAIWEB</small><span class="pila" aria-hidden="true"></span><b class="cuenta">0</b></div>
+        <div class="nodo n-cons" id="n-pai"><b>Reporte PAIWEB</b><small class="estado-nodo">esperando</small></div>
+        <div class="salida" id="o-pai"><small>Dosis reportadas</small><b>0</b></div>
+        <div class="dlq" id="dlq"><small>Cola de errores</small><b>0</b></div>
+      </div>
+    </div>
+
+    <div class="reintentos" aria-hidden="true">
+      <div class="reintentos-titulo">Línea de reintentos de PAIWEB</div>
+      <div class="reintentos-pista">
+        <div class="reintentos-barra" id="barra-reintentos"></div>
+        <span class="hito" style="left:0%"><i></i><span class="h-nombre">Intento 1</span><span class="h-t">0 s</span></span>
+        <span class="hito" style="left:14.3%"><i></i><span class="h-nombre">Intento 2</span><span class="h-t">2 s</span></span>
+        <span class="hito" style="left:42.9%"><i></i><span class="h-nombre">Intento 3</span><span class="h-t">6 s</span></span>
+        <span class="hito" style="left:100%"><i></i><span class="h-nombre">Intento 4</span><span class="h-t">14 s</span></span>
+      </div>
+    </div>
+
+    <ol class="sim-log" id="sim-log" aria-live="polite"><li class="vacio">Registra una dosis para empezar.</li></ol>
+  </div>
+</section>
+
+<section id="drivers-principales">
+  <h2><span class="num">3</span>Drivers principales</h2>
+  <p class="pide">En orden de prioridad. El primero es el que decidió el estilo.</p>
+
+  <div class="drivers">
+    <article class="driver d1">
+      <span class="driver-n">1</span>
+      <div>
+        <h4>Interoperabilidad tolerante a fallos</h4>
+        <p>El reporte a PAIWEB es obligatorio, pero ese sistema no lo controlamos y puede no responder. Ninguna dosis registrada puede perderse por eso.</p>
+        <p class="driver-meta"><span class="nivel A">A</span> importancia <span class="nivel A">A</span> dificultad. Se cumple con colas durables, reintentos y cola de errores.</p>
+      </div>
+    </article>
+    <article class="driver d2">
+      <span class="driver-n">2</span>
+      <div>
+        <h4>Correctitud clínica</h4>
+        <p>Una dosis fuera de orden o antes del intervalo mínimo se rechaza antes de publicarse. Un error afecta la salud de un niño.</p>
+        <p class="driver-meta"><span class="nivel A">A</span> importancia <span class="nivel M">M</span> dificultad. Se cumple con las 5 reglas de <code>EsquemaVacunacion</code>.</p>
+      </div>
+    </article>
+    <article class="driver d3">
+      <span class="driver-n">3</span>
+      <div>
+        <h4>Seguridad y privacidad</h4>
+        <p>Datos de salud de menores, protegidos por la Ley 1581: un acudiente solo ve a sus hijos y todo acceso queda auditado.</p>
+        <p class="driver-meta"><span class="nivel A">A</span> importancia <span class="nivel M">M</span> dificultad. Queda en el diseño; el esqueleto no lo implementa todavía.</p>
+      </div>
+    </article>
+  </div>
+</section>
+
+<section id="sustentacion">
+  <h2><span class="num">4</span>Preguntas de la sustentación</h2>
+  <p class="pide">Las cuatro preguntas publicadas, respondidas sobre la decisión de usar eventos.</p>
+  <div class="pregunta">
+    <h4>¿Qué driver justifica esta decisión, y de dónde salió ese driver?</h4>
+    <p>La interoperabilidad tolerante a fallos (E1 y E3). Sale de una restricción externa: el reporte a PAIWEB es obligatorio, pero su disponibilidad no la controlamos, y la operación de vacunación en una IPS no puede detenerse porque un sistema del Ministerio no responde.</p>
+    <p class="evidencia">En el código: <a href="#cod-publicador">PublicadorRabbit, línea 23</a> publica sin esperar a nadie; <a href="#cod-colas">RabbitConfig, líneas 34 a 40</a> deja la cola durable.</p>
+  </div>
+
+  <div class="pregunta">
+    <h4>¿Qué alternativa descartaron aquí, y por qué?</h4>
+    <p>Llamadas REST síncronas desde vacunación. Era la opción más simple, pero con ella una caída de PAIWEB hace fallar el registro de la dosis o lo deja a medias, y vacunación tendría que conocer a cada consumidor. También descartamos Kafka, porque su ventaja principal (retener y reprocesar grandes volúmenes) no responde a ningún driver actual.</p>
+    <p class="evidencia">En el código: el publicador nunca nombra una cola, solo el exchange. Con REST tendría la URL de cada consumidor.</p>
+  </div>
+
+  <div class="pregunta">
+    <h4>¿Qué atributo empeoró con esta decisión, y por qué es aceptable?</h4>
+    <p>La consistencia inmediata y la facilidad de depuración. Hay unos segundos en que la dosis está registrada pero aún no reportada, y seguir un flujo exige revisar varios servicios. Es aceptable porque PAIWEB no exige reporte en tiempo real; lo inaceptable sería perder un reporte, y eso es justamente lo que el diseño evita.</p>
+    <p class="evidencia">En el código: <a href="#cod-reintentos">application.yml, líneas 17 a 19</a>: hasta 14 s de retraso a cambio de no perder el reporte.</p>
+  </div>
+
+  <div class="pregunta">
+    <h4>Si el negocio creciera diez veces, ¿qué parte se rompería primero?</h4>
+    <p>El estado en memoria: el historial de dosis y los eventos ya procesados no sobreviven a un reinicio ni se pueden repartir entre varias instancias, así que no se puede escalar horizontalmente sin una base de datos. Lo siguiente sería RabbitMQ en un solo nodo (R2), y después el envío masivo de notificaciones a acudientes, que dependería de los límites del proveedor de mensajería. El diseño por eventos ayuda aquí: cada consumidor se puede escalar por separado agregando instancias que lean de la misma cola.</p>
+    <p class="evidencia">En el código: <a href="#cod-listener">ReportePaiwebListener, línea 20</a>, un <code>Set</code> en memoria que cada instancia tendría por separado.</p>
+  </div>
+</section>
+
+<section id="anexo">
+  <h2><span class="num">+</span>Documentación completa</h2>
+  <p class="pide">El resto del diseño documentado. Abre solo lo que necesites.</p>
+  
+  <details class="anexo" id="propuesta">
+    <summary>Propuesta del dominio (formulario)</summary>
+    <div class="anexo-cuerpo">
+      <h3>¿Qué dominio eligieron?</h3>
+  <p>Una plataforma para IPS y consultorios pediátricos que lleva el control de crecimiento y desarrollo de cada niño, su esquema de vacunación y las citas de seguimiento, con acceso para padres y acudientes.</p>
+
+  <h3>¿Qué lo hace complejo?</h3>
+  <div class="tarjetas">
+    <div class="tarjeta">
+      <h4>Reglas de negocio</h4>
+      <p>Las vacunas se aplican por edad, con intervalos mínimos entre dosis y un orden obligatorio. Las mediciones se evalúan contra las curvas de la OMS y los controles son periódicos según la Resolución 3280 de 2018.</p>
+    </div>
+    <div class="tarjeta">
+      <h4>Usuarios distintos</h4>
+      <p>Pediatría y enfermería registran y evalúan; el personal administrativo agenda; los acudientes consultan el carné y reciben recordatorios; la IPS reporta a los entes de salud.</p>
+    </div>
+    <div class="tarjeta">
+      <h4>Restricciones externas</h4>
+      <p>Datos de salud de menores protegidos por la Ley 1581, historia clínica interoperable exigida por la Ley 2015 de 2020 y reporte obligatorio de vacunación a PAIWEB, un sistema externo que puede no responder.</p>
+    </div>
+  </div>
+
+  <h3>Sus tres drivers principales</h3>
+  <div class="tabla-envoltura">
+    <table>
+      <thead><tr><th>Driver</th><th>Qué significa aquí</th><th>Por qué pesa</th></tr></thead>
+      <tbody>
+        <tr><td class="atributo">Correctitud clínica</td><td>Una dosis fuera de orden o de intervalo no se registra; las alertas son exactas.</td><td>Un error afecta la salud de un niño.</td></tr>
+        <tr><td class="atributo">Seguridad y privacidad</td><td>Acceso por rol: un acudiente solo ve a sus hijos, un médico solo a sus pacientes, y todo acceso queda auditado.</td><td>Son datos sensibles de menores, protegidos por ley.</td></tr>
+        <tr><td class="atributo">Interoperabilidad</td><td>El sistema intercambia información con PAIWEB y la historia clínica, y tolera que estén caídos sin perder registros.</td><td>El reporte es obligatorio y depende de sistemas que no controlamos.</td></tr>
+      </tbody>
+    </table>
+  </div>
+    </div>
+  </details>
+  <details class="anexo" id="drivers">
+    <summary>Árbol de utilidad completo y restricciones</summary>
+    <div class="anexo-cuerpo">
+      <p>Cada hoja es un escenario concreto. La primera letra es la <b>importancia para el negocio</b> y la segunda la <b>dificultad técnica</b> (A alta, M media, B baja). Las hojas A-A son las que definieron la arquitectura; las de dificultad baja no la condicionan.</p>
+
+  <div class="tabla-envoltura">
+    <table>
+      <thead><tr><th>Atributo</th><th>Refinamiento</th><th>Hoja (escenario)</th><th>Imp.</th><th>Dif.</th><th>En el esqueleto</th></tr></thead>
+      <tbody>
+        <tr><td class="atributo" rowspan="2">Interoperabilidad</td><td>Tolerancia a fallos del externo</td><td>Si PAIWEB no responde, ninguna dosis registrada se pierde y se reporta al recuperarse.</td><td><span class="nivel A">A</span></td><td><span class="nivel A">A</span></td><td><span class="estado si">Demostrado</span></td></tr>
+        <tr><td>Aislamiento de fallas</td><td>Si el servicio de notificaciones está caído, registrar una dosis sigue funcionando.</td><td><span class="nivel A">A</span></td><td><span class="nivel M">M</span></td><td><span class="estado si">Demostrado</span></td></tr>
+        <tr><td class="atributo" rowspan="2">Correctitud clínica</td><td>Reglas del esquema</td><td>Una dosis que viola el intervalo mínimo o el orden se rechaza antes de publicarse.</td><td><span class="nivel A">A</span></td><td><span class="nivel M">M</span></td><td><span class="estado si">Demostrado</span></td></tr>
+        <tr><td>Alertas de crecimiento</td><td>Una medición bajo el percentil 3 de la OMS genera alerta de riesgo nutricional.</td><td><span class="nivel A">A</span></td><td><span class="nivel A">A</span></td><td><span class="estado no">Diseño</span></td></tr>
+        <tr><td class="atributo" rowspan="2">Seguridad</td><td>Control de acceso</td><td>Un acudiente que consulta un niño que no es suyo recibe acceso denegado.</td><td><span class="nivel A">A</span></td><td><span class="nivel M">M</span></td><td><span class="estado no">Diseño</span></td></tr>
+        <tr><td>Auditoría</td><td>Toda lectura de historia queda registrada con quién, qué y cuándo.</td><td><span class="nivel M">M</span></td><td><span class="nivel M">M</span></td><td><span class="estado no">Diseño</span></td></tr>
+        <tr><td class="atributo" rowspan="2">Modificabilidad</td><td>Nuevos consumidores</td><td>Agregar un tablero para la secretaría de salud no exige tocar el servicio de vacunación.</td><td><span class="nivel M">M</span></td><td><span class="nivel B">B</span></td><td><span class="estado si">Demostrado</span></td></tr>
+        <tr><td>Cambio normativo</td><td>Un cambio del esquema nacional se aplica modificando solo el dominio de vacunación.</td><td><span class="nivel M">M</span></td><td><span class="nivel M">M</span></td><td><span class="estado si">Demostrado</span></td></tr>
+        <tr><td class="atributo">Rendimiento</td><td>Latencia de registro</td><td>Registrar una dosis responde en menos de 500 ms (p95) con 50 usuarios concurrentes.</td><td><span class="nivel B">B</span></td><td><span class="nivel B">B</span></td><td><span class="estado no">No prioritario</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Restricciones identificadas</h3>
+  <ul>
+    <li><b>Normativas:</b> Ley 1581 de 2012 (datos personales de menores), Resolución 3280 de 2018 (rutas de atención y controles), Ley 2015 de 2020 (historia clínica interoperable).</li>
+    <li><b>Integración:</b> el reporte de vacunación a PAIWEB es obligatorio y su disponibilidad no la controlamos.</li>
+    <li><b>Del proyecto:</b> tres integrantes, tres semanas, demostración en vivo con un solo comando; stack Java/Spring Boot que el equipo ya conoce.</li>
+  </ul>
+    </div>
+  </details>
+  <details class="anexo" id="escenarios">
+    <summary>Escenarios de calidad</summary>
+    <div class="anexo-cuerpo">
+      <article class="escenario">
+    <header><h4>PAIWEB no responde</h4><span>E1, Interoperabilidad, A-A</span></header>
+    <dl>
+      <dt>Fuente</dt><dd>Sistema externo PAIWEB</dd>
+      <dt>Estímulo</dt><dd>Deja de responder mientras se registran dosis</dd>
+      <dt>Artefacto</dt><dd>Servicio de reporte a PAIWEB</dd>
+      <dt>Entorno</dt><dd>Operación normal en horario de vacunación</dd>
+      <dt>Respuesta</dt><dd>El registro de la dosis sigue funcionando; el reporte se reintenta con espera creciente y, si se agotan los intentos, queda en una cola de errores para reprocesar</dd>
+      <dt>Medida</dt><dd class="medida">0 dosis perdidas; 4 intentos en ≈14 s antes de pasar a la cola de errores</dd>
+    </dl>
+  </article>
+
+  <article class="escenario">
+    <header><h4>Dosis fuera de intervalo</h4><span>E2, Correctitud clínica, A-M</span></header>
+    <dl>
+      <dt>Fuente</dt><dd>Personal de enfermería</dd>
+      <dt>Estímulo</dt><dd>Registra la dosis 2 de pentavalente 10 días después de la dosis 1</dd>
+      <dt>Artefacto</dt><dd>Dominio del servicio de vacunación</dd>
+      <dt>Entorno</dt><dd>Operación normal</dd>
+      <dt>Respuesta</dt><dd>Se rechaza con un mensaje que explica la regla incumplida y no se publica ningún evento</dd>
+      <dt>Medida</dt><dd class="medida">100 % de dosis inválidas rechazadas; 0 eventos publicados por ellas</dd>
+    </dl>
+  </article>
+
+  <article class="escenario">
+    <header><h4>Consumidor caído</h4><span>E3, Interoperabilidad, A-M</span></header>
+    <dl>
+      <dt>Fuente</dt><dd>Falla de infraestructura</dd>
+      <dt>Estímulo</dt><dd>El servicio de notificaciones o el de reporte se detiene</dd>
+      <dt>Artefacto</dt><dd>Servicio consumidor</dd>
+      <dt>Entorno</dt><dd>Operación normal; el resto del sistema sigue arriba</dd>
+      <dt>Respuesta</dt><dd>Los eventos se acumulan en su cola durable; al volver el servicio, los procesa sin intervención manual</dd>
+      <dt>Medida</dt><dd class="medida">El registro de dosis no se degrada; 0 eventos perdidos durante la caída</dd>
+    </dl>
+  </article>
+
+  <article class="escenario">
+    <header><h4>Nuevo consumidor</h4><span>E4, Modificabilidad, M-B</span></header>
+    <dl>
+      <dt>Fuente</dt><dd>Equipo de desarrollo</dd>
+      <dt>Estímulo</dt><dd>La secretaría de salud pide un tablero de cobertura de vacunación</dd>
+      <dt>Artefacto</dt><dd>Sistema completo</dd>
+      <dt>Entorno</dt><dd>Tiempo de desarrollo</dd>
+      <dt>Respuesta</dt><dd>Se crea un servicio nuevo con su propia cola enlazada al exchange</dd>
+      <dt>Medida</dt><dd class="medida">0 líneas modificadas en el servicio de vacunación</dd>
+    </dl>
+  </article>
+    </div>
+  </details>
+  <details class="anexo" id="estilo">
+    <summary>Estilo elegido: qué sacrifica</summary>
+    <div class="anexo-cuerpo">
+      <p><b>Arquitectura orientada a eventos con servicios independientes.</b> El servicio de vacunación publica el hecho <code>DosisAplicada</code> en un intermediario (RabbitMQ) y no sabe quién lo consume. Cada consumidor tiene su propia cola y reacciona por separado.</p>
+
+  <div class="tarjetas">
+    <div class="tarjeta">
+      <h4>Por qué driver</h4>
+      <p>Interoperabilidad (E1, E3): la cola desacopla en el tiempo al que registra del que reporta, así que PAIWEB caído no detiene la operación clínica. Modificabilidad (E4): sumar consumidores no toca al publicador.</p>
+    </div>
+    <div class="tarjeta">
+      <h4>Qué sacrifica</h4>
+      <p>Consistencia inmediata: hay segundos en que la dosis está registrada pero aún no reportada. Simplicidad: hay un componente más que operar y un flujo más difícil de seguir al depurar.</p>
+    </div>
+    <div class="tarjeta">
+      <h4>Por qué es aceptable</h4>
+      <p>PAIWEB no exige reporte en tiempo real, y un retraso de minutos no afecta la atención. Perder un reporte sí sería grave, y eso es lo que el estilo protege.</p>
+    </div>
+  </div>
+
+  <p>Dentro del servicio de vacunación se usan además <b>puertos y adaptadores</b>: el dominio no depende de Spring ni de RabbitMQ, lo que sostiene el driver de correctitud (las reglas se prueban sin infraestructura) y el de cambio normativo.</p>
+    </div>
+  </details>
+  <details class="anexo" id="contextos">
+    <summary>Contextos delimitados</summary>
+    <div class="anexo-cuerpo">
+      <div class="tabla-envoltura">
+    <table>
+      <thead><tr><th>Contexto</th><th>Responsabilidad</th><th>Señal que justifica la frontera</th></tr></thead>
+      <tbody>
+        <tr><td class="atributo">Vacunación</td><td>Esquema, reglas de dosis e historial. Es el núcleo y la fuente de verdad del evento.</td><td>Lenguaje clínico propio (dosis, intervalo, esquema) y un ritmo de cambio dictado por la norma nacional.</td></tr>
+        <tr><td class="atributo">Notificaciones</td><td>Comunicar al acudiente lo que pasó y lo que viene.</td><td>Otro lenguaje (mensaje, canal, destinatario), otro usuario (el acudiente) y falla de forma independiente: un SMS que no sale no invalida una dosis.</td></tr>
+        <tr><td class="atributo">Integración PAIWEB</td><td>Traducir y entregar el evento al sistema nacional.</td><td>Depende de un modelo externo que no controlamos; actúa como capa anticorrupción para que ese modelo no contamine el núcleo.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Cada contexto tiene su propia copia del contrato <code>DosisAplicada</code>; lo único compartido es el formato JSON del mensaje. Así ningún servicio depende del código de otro (ver ADR-002).</p>
+    </div>
+  </details>
+  <details class="anexo" id="tacticas">
+    <summary>Tácticas aplicadas</summary>
+    <div class="anexo-cuerpo">
+      <div class="tabla-envoltura">
+    <table>
+      <thead><tr><th>Táctica</th><th>Contra</th><th>Dónde está</th><th>Qué degrada</th></tr></thead>
+      <tbody>
+        <tr><td class="atributo">Intermediario publicar/suscribir</td><td>E3, E4</td><td>Exchange <code>pediatria.eventos</code></td><td>Trazabilidad de punta a punta; agrega un punto de falla</td></tr>
+        <tr><td class="atributo">Colas durables</td><td>E3</td><td><code>QueueBuilder.durable(...)</code></td><td>Algo de rendimiento por escritura a disco</td></tr>
+        <tr><td class="atributo">Reintento con espera creciente</td><td>E1</td><td><code>application.yml</code> de reporte-paiweb</td><td>Latencia del reporte (hasta ≈14 s)</td></tr>
+        <tr><td class="atributo">Cola de mensajes muertos (DLQ)</td><td>E1</td><td><code>paiweb.dosis-aplicada.dlq</code></td><td>Exige reprocesar a mano lo que cae ahí</td></tr>
+        <tr><td class="atributo">Receptor idempotente</td><td>E1</td><td><code>ReportePaiwebListener</code></td><td>Memoria para guardar los eventos ya procesados</td></tr>
+        <tr><td class="atributo">Validación en el dominio</td><td>E2</td><td><code>EsquemaVacunacion</code></td><td>Las reglas viven en un solo servicio: otros no pueden validar por su cuenta</td></tr>
+        <tr><td class="atributo">Encapsular (puertos)</td><td>Cambio normativo</td><td><code>HistorialDosis</code>, <code>PublicadorEventos</code></td><td>Más interfaces y clases que mantener</td></tr>
+      </tbody>
+    </table>
+  </div>
+    </div>
+  </details>
+  <details class="anexo" id="c4">
+    <summary>Diagrama C4 de contexto (nivel 1)</summary>
+    <div class="anexo-cuerpo">
+      <figure class="figura">
+    <svg viewBox="0 0 960 520" role="img" aria-label="Diagrama C4 de contexto">
+      <defs>
+        <marker id="m1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="punta"/></marker>
+      </defs>
+
+      <rect x="40" y="30" width="240" height="100" rx="12" class="c-persona"/>
+      <text x="160" y="68" text-anchor="middle" class="t-blanco" font-size="16" font-weight="700">Personal de salud</text>
+      <text x="160" y="88" text-anchor="middle" class="t-blanco" font-size="12">[Persona]</text>
+      <text x="160" y="108" text-anchor="middle" class="t-blanco" font-size="12">Pediatría y enfermería</text>
+
+      <rect x="720" y="30" width="220" height="100" rx="12" class="c-persona"/>
+      <text x="830" y="68" text-anchor="middle" class="t-blanco" font-size="16" font-weight="700">Acudiente</text>
+      <text x="830" y="88" text-anchor="middle" class="t-blanco" font-size="12">[Persona]</text>
+      <text x="830" y="108" text-anchor="middle" class="t-blanco" font-size="12">Padre, madre o responsable</text>
+
+      <rect x="330" y="200" width="300" height="110" rx="12" class="c-sistema"/>
+      <text x="480" y="240" text-anchor="middle" class="t-blanco" font-size="17" font-weight="700">Seguimiento pediátrico</text>
+      <text x="480" y="260" text-anchor="middle" class="t-blanco" font-size="12">[Sistema]</text>
+      <text x="480" y="282" text-anchor="middle" class="t-blanco" font-size="12">Vacunación, controles y alertas</text>
+
+      <rect x="720" y="215" width="220" height="80" rx="12" class="c-externo"/>
+      <text x="830" y="248" text-anchor="middle" class="t-blanco" font-size="15" font-weight="700">Mensajería</text>
+      <text x="830" y="268" text-anchor="middle" class="t-blanco" font-size="12">[Externo] SMS / correo</text>
+
+      <rect x="330" y="400" width="300" height="80" rx="12" class="c-externo"/>
+      <text x="480" y="433" text-anchor="middle" class="t-blanco" font-size="15" font-weight="700">PAIWEB</text>
+      <text x="480" y="453" text-anchor="middle" class="t-blanco" font-size="12">[Externo] Sistema nacional de vacunación</text>
+
+      <rect x="40" y="400" width="240" height="80" rx="12" class="c-futuro"/>
+      <text x="160" y="433" text-anchor="middle" class="t-tinta" font-size="15" font-weight="700">Historia clínica</text>
+      <text x="160" y="453" text-anchor="middle" class="t-suave" font-size="12">[Externo · fuera del esqueleto]</text>
+
+      <path d="M200,130 L380,200" class="flecha" marker-end="url(#m1)"/>
+      <text x="150" y="166" text-anchor="middle" class="t-tinta" font-size="12">Registra dosis y controles</text>
+      <text x="150" y="181" text-anchor="middle" class="t-suave" font-size="11">[HTTPS/JSON]</text>
+
+      <path d="M630,255 L720,255" class="flecha" marker-end="url(#m1)"/>
+      <text x="675" y="244" text-anchor="middle" class="t-tinta" font-size="12">Envía avisos</text>
+      <text x="675" y="274" text-anchor="middle" class="t-suave" font-size="11">[asíncrono]</text>
+
+      <path d="M830,215 L830,130" class="flecha" marker-end="url(#m1)"/>
+      <rect x="838" y="160" width="100" height="34" rx="4" class="fondo-etiqueta"/>
+      <text x="888" y="174" text-anchor="middle" class="t-tinta" font-size="12">Entrega aviso</text>
+      <text x="888" y="189" text-anchor="middle" class="t-suave" font-size="11">[SMS / correo]</text>
+
+      <path d="M480,310 L480,400" class="flecha" marker-end="url(#m1)"/>
+      <rect x="490" y="338" width="170" height="34" rx="4" class="fondo-etiqueta"/>
+      <text x="575" y="352" text-anchor="middle" class="t-tinta" font-size="12">Reporta dosis aplicadas</text>
+      <text x="575" y="367" text-anchor="middle" class="t-suave" font-size="11">[HTTPS, asíncrono]</text>
+
+      <path d="M330,290 L230,400" class="flecha discontinua" marker-end="url(#m1)"/>
+      <text x="175" y="334" text-anchor="middle" class="t-tinta" font-size="12">Intercambia historia</text>
+      <text x="175" y="349" text-anchor="middle" class="t-suave" font-size="11">[HL7 FHIR, futuro]</text>
+    </svg>
+    <div class="leyenda">
+      <span><i class="l-persona"></i>Persona</span>
+      <span><i class="l-sistema"></i>Nuestro sistema</span>
+      <span><i class="l-externo"></i>Sistema externo</span>
+      <span><i class="l-futuro"></i>Fuera del esqueleto</span>
+      <span>Flecha continua: implementada · discontinua: diseño</span>
+    </div>
+  </figure>
+    </div>
+  </details>
+  <details class="anexo" id="adr">
+    <summary>Decisiones de arquitectura (ADR)</summary>
+    <div class="anexo-cuerpo">
+      <article class="adr">
     <h3><code>ADR-001</code>Integrar los contextos por eventos con RabbitMQ</h3>
     <h5>Estado</h5>
     <p>Aceptada.</p>
@@ -514,13 +667,12 @@
       <li class="menos">El registro de eventos procesados vive en memoria: tras reiniciar el servicio, un duplicado sí se reportaría de nuevo (ver R3).</li>
     </ul>
   </article>
-</section>
-
-<section id="riesgos">
-  <h2><span class="num">09</span>Riesgos identificados</h2>
-  <p class="pide">Al menos dos, con lo que habría que verificar para descartarlos.</p>
-
-  <div class="tabla-envoltura">
+    </div>
+  </details>
+  <details class="anexo" id="riesgos">
+    <summary>Riesgos identificados</summary>
+    <div class="anexo-cuerpo">
+      <div class="tabla-envoltura">
     <table>
       <thead><tr><th>Riesgo</th><th>Por qué existe</th><th>Cómo verificarlo o descartarlo</th></tr></thead>
       <tbody>
@@ -531,13 +683,12 @@
       </tbody>
     </table>
   </div>
-</section>
-
-<section id="codigo">
-  <h2><span class="num">10</span>El código, línea por línea</h2>
-  <p class="pide">Las piezas del esqueleto que materializan el diseño. Pasa el cursor o toca una nota para ver sus líneas resaltadas.</p>
-
-  <article class="anotado" id="cod-esquema">
+    </div>
+  </details>
+  <details class="anexo" id="codigo">
+    <summary>El código, línea por línea</summary>
+    <div class="anexo-cuerpo">
+      <article class="anotado" id="cod-esquema">
     <header class="anotado-cab">
       <h3>Las reglas clínicas del esquema</h3>
       <p class="archivo">servicio-vacunacion/src/main/java/co/edu/pediatria/vacunacion/dominio/EsquemaVacunacion.java</p>
@@ -629,80 +780,12 @@
 │   └── dominio · aplicacion · infraestructura · web
 ├── servicio-notificaciones/    consumidor 1
 └── servicio-reporte-paiweb/    consumidor 2, con DLQ</code></pre>
-</section>
-
-<section id="esqueleto">
-  <h2><span class="num">11</span>Demostración y simulador</h2>
-  <p class="pide">Arranca con un comando y se demuestra en vivo.</p>
-
-  <h3>Simulador del evento</h3>
-  <p>Una versión reducida de lo que pasa en el sistema real. Registra dosis, apaga el servicio de notificaciones o deja a PAIWEB sin responder, y mira cómo se comporta cada parte. Los tiempos de espera van acelerados.</p>
-
-  <div class="sim" id="sim">
-    <div class="sim-controles">
-      <button type="button" class="sim-boton principal" data-accion="valida">Registrar dosis válida</button>
-      <button type="button" class="sim-boton peligro" data-accion="invalida">Intentar dosis fuera de intervalo</button>
-      <label class="interruptor"><input type="checkbox" id="sw-not" checked><span class="pista"></span>Servicio de notificaciones encendido</label>
-      <label class="interruptor"><input type="checkbox" id="sw-pai" checked><span class="pista"></span>PAIWEB responde</label>
-      <button type="button" class="sim-boton suave" data-accion="reiniciar">Reiniciar</button>
     </div>
-
-    <div class="sim-escena" id="sim-escena">
-      <div class="nodo n-vac" id="n-vac"><b>Vacunación</b><small>valida y publica</small></div>
-      <div class="nodo n-ex" id="n-ex"><b>RabbitMQ</b><small>pediatria.eventos</small></div>
-
-      <div class="carril c-not">
-        <div class="cola" id="q-not"><small>Cola de notificaciones</small><span class="pila" aria-hidden="true"></span><b class="cuenta">0</b></div>
-        <div class="nodo n-cons" id="n-not"><b>Notificaciones</b><small class="estado-nodo">esperando</small></div>
-        <div class="salida" id="o-not"><small>Acudientes avisados</small><b>0</b></div>
-      </div>
-
-      <div class="carril c-pai">
-        <div class="cola" id="q-pai"><small>Cola de PAIWEB</small><span class="pila" aria-hidden="true"></span><b class="cuenta">0</b></div>
-        <div class="nodo n-cons" id="n-pai"><b>Reporte PAIWEB</b><small class="estado-nodo">esperando</small></div>
-        <div class="salida" id="o-pai"><small>Dosis reportadas</small><b>0</b></div>
-        <div class="dlq" id="dlq"><small>Cola de errores</small><b>0</b></div>
-      </div>
-    </div>
-
-    <div class="reintentos" aria-hidden="true">
-      <div class="reintentos-titulo">Línea de reintentos de PAIWEB</div>
-      <div class="reintentos-pista">
-        <div class="reintentos-barra" id="barra-reintentos"></div>
-        <span class="hito" style="left:0%"><i></i><span class="h-nombre">Intento 1</span><span class="h-t">0 s</span></span>
-        <span class="hito" style="left:14.3%"><i></i><span class="h-nombre">Intento 2</span><span class="h-t">2 s</span></span>
-        <span class="hito" style="left:42.9%"><i></i><span class="h-nombre">Intento 3</span><span class="h-t">6 s</span></span>
-        <span class="hito" style="left:100%"><i></i><span class="h-nombre">Intento 4</span><span class="h-t">14 s</span></span>
-      </div>
-    </div>
-
-    <ol class="sim-log" id="sim-log" aria-live="polite"><li class="vacio">Registra una dosis para empezar.</li></ol>
-  </div>
-
-  <h3>En la máquina, con Docker</h3>
-
-<pre><code>docker compose up --build
-./demo.sh</code></pre>
-
-  <p><code>demo.sh</code> registra una dosis válida, intenta una que viola el intervalo (responde 422 y no publica nada), registra la segunda dosis válida y consulta a los dos consumidores para mostrar que ambos recibieron los eventos por separado.</p>
-
-  <h3>Demostrar tolerancia a fallos</h3>
-<pre><code>docker compose stop reporte-paiweb
-./demo.sh
-docker compose start reporte-paiweb
-
-curl -X POST "localhost:8083/api/paiweb/disponibilidad?valor=false"
-./demo.sh
-docker compose logs -f reporte-paiweb</code></pre>
-
-  <p>Con el servicio detenido, notificaciones sigue funcionando y los eventos esperan en la cola de PAIWEB. Con PAIWEB simulado como caído, los logs muestran los cuatro intentos y el mensaje termina en la cola de errores, visible en la consola de RabbitMQ (<code>localhost:15672</code>, usuario y clave <code>guest</code>).</p>
-</section>
-
-<section id="rubrica">
-  <h2><span class="num">12</span>El cuestionario, punto por punto</h2>
-  <p class="pide">Todo lo que pidió el enunciado, con la respuesta y dónde se demuestra.</p>
-
-  <h3>Las tres preguntas del formulario</h3>
+  </details>
+  <details class="anexo" id="rubrica">
+    <summary>El cuestionario y la rúbrica, punto por punto</summary>
+    <div class="anexo-cuerpo">
+      <h3>Las tres preguntas del formulario</h3>
   <div class="qa">
     <details open>
       <summary><span class="qa-n">1</span>¿Qué dominio eligieron?</summary>
@@ -723,14 +806,14 @@ docker compose logs -f reporte-paiweb</code></pre>
     <table class="lista-control">
       <thead><tr><th>Pieza</th><th>Qué tenía que traer</th><th>Dónde está</th></tr></thead>
       <tbody>
-        <tr><td class="atributo">Drivers priorizados</td><td>Árbol de utilidad con importancia y dificultad; restricciones</td><td><a href="#drivers">Sección 2</a>: 9 hojas que sí discriminan, de A-A a B-B</td></tr>
-        <tr><td class="atributo">Escenarios</td><td>Al menos tres, con entorno y medida</td><td><a href="#escenarios">Sección 3</a>: cuatro escenarios completos</td></tr>
-        <tr><td class="atributo">Estilo elegido</td><td>Cuál, por qué driver y qué sacrifica</td><td><a href="#estilo">Sección 4</a>: eventos, por interoperabilidad; sacrifica consistencia inmediata</td></tr>
-        <tr><td class="atributo">Contextos delimitados</td><td>Fronteras y la señal que justifica cada una</td><td><a href="#contextos">Sección 5</a>: vacunación, notificaciones e integración PAIWEB</td></tr>
-        <tr><td class="atributo">Tácticas aplicadas</td><td>Cuáles, contra qué escenario y qué degradan</td><td><a href="#tacticas">Sección 6</a>: siete tácticas, cada una con su costo</td></tr>
-        <tr><td class="atributo">Diagramas C4</td><td>Niveles 1 y 2, flechas anotadas y leyenda</td><td><a href="#c4">Sección 7</a>: contexto y contenedores</td></tr>
-        <tr><td class="atributo">Tres ADR</td><td>Con alternativas descartadas y consecuencias malas</td><td><a href="#adr">Sección 8</a>: eventos, contrato propio y reintentos</td></tr>
-        <tr><td class="atributo">Riesgos</td><td>Al menos dos, con cómo verificarlos</td><td><a href="#riesgos">Sección 9</a>: cuatro riesgos con su prueba</td></tr>
+        <tr><td class="atributo">Drivers priorizados</td><td>Árbol de utilidad con importancia y dificultad; restricciones</td><td><a href="#drivers">Árbol de utilidad</a>: 9 hojas que sí discriminan, de A-A a B-B</td></tr>
+        <tr><td class="atributo">Escenarios</td><td>Al menos tres, con entorno y medida</td><td><a href="#escenarios">Escenarios</a>: cuatro escenarios completos</td></tr>
+        <tr><td class="atributo">Estilo elegido</td><td>Cuál, por qué driver y qué sacrifica</td><td><a href="#estilo">Estilo</a>: eventos, por interoperabilidad; sacrifica consistencia inmediata</td></tr>
+        <tr><td class="atributo">Contextos delimitados</td><td>Fronteras y la señal que justifica cada una</td><td><a href="#contextos">Contextos</a>: vacunación, notificaciones e integración PAIWEB</td></tr>
+        <tr><td class="atributo">Tácticas aplicadas</td><td>Cuáles, contra qué escenario y qué degradan</td><td><a href="#tacticas">Tácticas</a>: siete tácticas, cada una con su costo</td></tr>
+        <tr><td class="atributo">Diagramas C4</td><td>Niveles 1 y 2, flechas anotadas y leyenda</td><td><a href="#c4">Diagrama C4</a>: contexto y contenedores</td></tr>
+        <tr><td class="atributo">Tres ADR</td><td>Con alternativas descartadas y consecuencias malas</td><td><a href="#adr">ADR</a>: eventos, contrato propio y reintentos</td></tr>
+        <tr><td class="atributo">Riesgos</td><td>Al menos dos, con cómo verificarlos</td><td><a href="#riesgos">Riesgos</a>: cuatro riesgos con su prueba</td></tr>
       </tbody>
     </table>
   </div>
@@ -775,38 +858,10 @@ docker compose logs -f reporte-paiweb</code></pre>
       <p class="evidencia">Evidencia: <a href="#adr">alternativas en los ADR</a> y <a href="#sustentacion">preguntas de sustentación</a></p>
     </article>
   </div>
+    </div>
+  </details>
 </section>
 
-
-
-<section id="sustentacion">
-  <h2><span class="num">13</span>Preguntas de sustentación</h2>
-  <p class="pide">Las cuatro preguntas publicadas, aplicadas a la decisión principal y apoyadas en el código.</p>
-
-  <div class="pregunta">
-    <h4>¿Qué driver justifica esta decisión, y de dónde salió ese driver?</h4>
-    <p>La interoperabilidad tolerante a fallos (E1 y E3). Sale de una restricción externa: el reporte a PAIWEB es obligatorio, pero su disponibilidad no la controlamos, y la operación de vacunación en una IPS no puede detenerse porque un sistema del Ministerio no responde.</p>
-    <p class="evidencia">En el código: <a href="#cod-publicador">PublicadorRabbit, línea 23</a> publica sin esperar a nadie; <a href="#cod-colas">RabbitConfig, líneas 34 a 40</a> deja la cola durable.</p>
-  </div>
-
-  <div class="pregunta">
-    <h4>¿Qué alternativa descartaron aquí, y por qué?</h4>
-    <p>Llamadas REST síncronas desde vacunación. Era la opción más simple, pero con ella una caída de PAIWEB hace fallar el registro de la dosis o lo deja a medias, y vacunación tendría que conocer a cada consumidor. También descartamos Kafka, porque su ventaja principal (retener y reprocesar grandes volúmenes) no responde a ningún driver actual.</p>
-    <p class="evidencia">En el código: el publicador nunca nombra una cola, solo el exchange. Con REST tendría la URL de cada consumidor.</p>
-  </div>
-
-  <div class="pregunta">
-    <h4>¿Qué atributo empeoró con esta decisión, y por qué es aceptable?</h4>
-    <p>La consistencia inmediata y la facilidad de depuración. Hay unos segundos en que la dosis está registrada pero aún no reportada, y seguir un flujo exige revisar varios servicios. Es aceptable porque PAIWEB no exige reporte en tiempo real; lo inaceptable sería perder un reporte, y eso es justamente lo que el diseño evita.</p>
-    <p class="evidencia">En el código: <a href="#cod-reintentos">application.yml, líneas 17 a 19</a>: hasta 14 s de retraso a cambio de no perder el reporte.</p>
-  </div>
-
-  <div class="pregunta">
-    <h4>Si el negocio creciera diez veces, ¿qué parte se rompería primero?</h4>
-    <p>El estado en memoria: el historial de dosis y los eventos ya procesados no sobreviven a un reinicio ni se pueden repartir entre varias instancias, así que no se puede escalar horizontalmente sin una base de datos. Lo siguiente sería RabbitMQ en un solo nodo (R2), y después el envío masivo de notificaciones a acudientes, que dependería de los límites del proveedor de mensajería. El diseño por eventos ayuda aquí: cada consumidor se puede escalar por separado agregando instancias que lean de la misma cola.</p>
-    <p class="evidencia">En el código: <a href="#cod-listener">ReportePaiwebListener, línea 20</a>, un <code>Set</code> en memoria que cada instancia tendría por separado.</p>
-  </div>
-</section>
 
 <footer class="pie">
   Taller final · Arquitectura de Software · Esquema de vacunación ilustrativo, no oficial del PAI.
