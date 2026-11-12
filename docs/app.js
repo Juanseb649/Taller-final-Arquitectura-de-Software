@@ -373,3 +373,28 @@ if (sim) {
 
   pintar();
 }
+
+const abrirDestino = (hash) => {
+  if (!hash || hash.length < 2) return;
+  const destino = document.getElementById(decodeURIComponent(hash.slice(1)));
+  if (!destino) return;
+  let nodo = destino;
+  while (nodo) {
+    if (nodo.tagName === "DETAILS") nodo.open = true;
+    nodo = nodo.parentElement;
+  }
+  requestAnimationFrame(() => destino.scrollIntoView({ behavior: sinMovimiento ? "auto" : "smooth", block: "start" }));
+};
+
+document.addEventListener("click", (e) => {
+  const a = e.target.closest("a[href^='#']");
+  if (!a) return;
+  const destino = document.getElementById(decodeURIComponent(a.getAttribute("href").slice(1)));
+  if (destino && destino.closest("details")) {
+    e.preventDefault();
+    history.replaceState(null, "", a.getAttribute("href"));
+    abrirDestino(a.getAttribute("href"));
+  }
+});
+
+abrirDestino(location.hash);
